@@ -326,6 +326,8 @@ public class Main extends Service implements Runnable {
 						if (mCallback != null)
 							mIMain.registerCallback(mICallback);
 					} catch (RemoteException e) {
+						release();
+						mContext.stopService(new Intent(mContext, Main.class));
 						if (mCallback != null)
 							mCallback.onError(REMOTE_ERROR);
 					}
@@ -334,6 +336,8 @@ public class Main extends Service implements Runnable {
 
 			@Override
 			public void onServiceDisconnected(ComponentName name) {
+				release();
+				mContext.stopService(new Intent(mContext, Main.class));
 				if (mCallback != null)
 					mCallback.onError(REMOTE_ERROR);
 			}
@@ -407,6 +411,7 @@ public class Main extends Service implements Runnable {
 								mIMain.unregisterCallback(mICallback);
 						} catch (RemoteException e) {
 						}
+						mIMain = null;
 					}
 				}
 				mBound = false;
