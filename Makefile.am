@@ -307,7 +307,11 @@ android/build/res/drawable/icon.png: mpd.svg
 	mkdir -p $(@D)
 	rsvg-convert --width=48 --height=48 $< -o $@
 
+android/build/res/drawable/notification_icon.png: android/build/res/drawable/icon.png
+	convert $< -colorspace Gray -gamma 2.2 $@
+
 APK_DEPS = android/build/res/drawable/icon.png \
+	android/build/res/drawable/notification_icon.png \
 	android/build/libs/armeabi-v7a/libmpd.so \
 	$(wildcard $(srcdir)/android/src/*.java) \
 	android/build/build.xml
