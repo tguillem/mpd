@@ -290,7 +290,7 @@ android/build/build.xml: android/AndroidManifest.xml
 	ln -s $(abs_srcdir)/android/res/values $(abs_srcdir)/android/res/layout android/build/res
 	$(ANDROID_SDK)/tools/android update project --path android/build --target android-17 --name $(APK_NAME)
 
-android/build/bin/classes/org/musicpd/Bridge.class: android/src/Bridge.java android/build/build.xml android/build/res/drawable/icon.png
+android/build/bin/classes/org/musicpd/Bridge.class: android/src/Bridge.java android/build/build.xml android/build/res/drawable/icon.png android/build/res/drawable/notification_icon.png
 	cd android/build && ant compile-jni-classes
 
 android/build/include/org_musicpd_Bridge.h: android/build/bin/classes/org/musicpd/Bridge.class
@@ -307,7 +307,11 @@ android/build/res/drawable/icon.png: mpd.svg
 	mkdir -p $(@D)
 	rsvg-convert --width=48 --height=48 $< -o $@
 
+android/build/res/drawable/notification_icon.png: android/build/res/drawable/icon.png
+	convert $< -colorspace Gray -gamma 2.2 $@
+
 APK_DEPS = android/build/res/drawable/icon.png \
+	android/build/res/drawable/notification_icon.png \
 	android/build/libs/armeabi-v7a/libmpd.so \
 	$(wildcard $(srcdir)/android/src/*.java) \
 	android/build/build.xml
