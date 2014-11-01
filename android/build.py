@@ -43,15 +43,34 @@ arch_path = os.path.join(lib_path, host_arch)
 build_path = os.path.join(arch_path, 'build')
 root_path = os.path.join(arch_path, 'root')
 
+with open(os.path.join(ndk_path, 'RELEASE.TXT')) as f:
+    content = f.readline()
+    if content:
+        is_64bit = content.find('64-bit') != -1
+        ndk_v = content.split(' ', 1)[0]
+
 # build host configuration
-build_arch = 'linux-x86_64'
+build_arch = 'linux-x86_64' if is_64bit else 'linux-x86'
 
 # redirect pkg-config to use our root directory instead of the default
 # one on the build host
 os.environ['PKG_CONFIG_LIBDIR'] = os.path.join(root_path, 'lib/pkgconfig')
 
-# set up the NDK toolchain
+# select the NDK compiler
+if ndk_v.startswith('r10'):
+    gcc_version = '4.9'
+    llvm_version = '3.5'
+else:
+    gcc_version = '4.8'
+    llvm_version = '3.3'
 
+# select the NDK target
+ndk_arch = 'arm'
+host_arch = 'arm-linux-androideabi'
+android_abi = 'armeabi-v7a'
+ndk_platform = 'android-14'
+
+# set up the NDK toolchain
 gcc_toolchain = os.path.join(ndk_path, 'toolchains', host_arch + '-' + gcc_version, 'prebuilt', build_arch)
 llvm_toolchain = os.path.join(ndk_path, 'toolchains', 'llvm-' + llvm_version, 'prebuilt', build_arch)
 ndk_platform_path = os.path.join(ndk_path, 'platforms', ndk_platform)
