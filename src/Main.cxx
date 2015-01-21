@@ -774,7 +774,12 @@ Java_org_musicpd_Bridge_run(JNIEnv *env, jclass, jobject _context, jobject _logL
 	if (_logListener != nullptr)
 		logListener = new LogListener(env, _logListener);
 
-	mpd_main(0, nullptr);
+	int ret = mpd_main(0, nullptr);
+
+	/* In case of error, there can be some uninitialized variables that
+	 * will cause undefined behavior if main is run again. */
+	if (ret != EXIT_SUCCESS)
+		FormatFatalError("mpd_main failed: return code: %d", ret);
 
 	delete logListener;
 	delete context;
