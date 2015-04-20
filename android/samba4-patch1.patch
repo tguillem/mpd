@@ -1,0 +1,13 @@
+diff --git a/lib/replace/wscript b/lib/replace/wscript
+index 1949448..20aeeb6 100644
+--- a/lib/replace/wscript
++++ b/lib/replace/wscript
+@@ -436,6 +436,8 @@ removeea setea
+         if conf.CHECK_FUNCS_IN('pthread_mutex_lock', 'pthread'):
+             PTHREAD_CFLAGS='-D_REENTRANT'
+             PTHREAD_LDFLAGS='-lpthread'
++    PTHREAD_CFLAGS='-D_REENTRANT'
++    PTHREAD_LDFLAGS=''
+ 
+     if PTHREAD_CFLAGS != 'error' and PTHREAD_LDFLAGS != 'error':
+         if conf.CONFIG_SET('replace_add_global_pthread'):

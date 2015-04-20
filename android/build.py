@@ -188,23 +188,23 @@ class Project:
 
     def unpack(self):
         global src_path
-        tarball = self.download()
+#        tarball = self.download()
         path = os.path.join(src_path, self.base)
-        try:
-            shutil.rmtree(path)
-        except FileNotFoundError:
-            pass
-        os.makedirs(src_path, exist_ok=True)
-        subprocess.check_call(['/bin/tar', 'xfC', tarball, src_path])
+#        try:
+#            shutil.rmtree(path)
+#        except FileNotFoundError:
+#            pass
+#        os.makedirs(src_path, exist_ok=True)
+#        subprocess.check_call(['/bin/tar', 'xfC', tarball, src_path])
         return path
 
     def make_build_path(self):
         path = os.path.join(build_path, self.base)
-        try:
-            shutil.rmtree(path)
-        except FileNotFoundError:
-            pass
-        os.makedirs(path, exist_ok=True)
+#        try:
+#            shutil.rmtree(path)
+#        except FileNotFoundError:
+#            pass
+#       os.makedirs(path, exist_ok=True)
         return path
 
 class AutotoolsProject(Project):
@@ -309,6 +309,44 @@ class BoostProject(Project):
                     shutil.copyfile(os.path.join(dirpath, name),
                                     os.path.join(destdir, name))
 
+class SambaProject(Project):
+    def __init__(self, url, md5, installed, configure_args=[],
+                 cppflags='',
+                 **kwargs):
+        Project.__init__(self, url, md5, installed, **kwargs)
+        self.configure_args = configure_args
+        self.cppflags = cppflags
+
+    def build(self):
+        src = self.unpack()
+        build = self.make_build_path()
+
+        select_toolchain(use_cxx=self.use_cxx, use_clang=self.use_clang)
+
+        env = os.environ.copy()
+        env['CC'] = cc
+        env['CPP'] = cxx
+        env['RANLIB'] = os.path.join(gcc_toolchain, 'bin', host_arch + '-ranlib')
+        env['CFLAGS'] = cflags
+        env['CXXFLAGS'] = cxxflags
+        env['CPPFLAGS'] = cppflags + ' ' + self.cppflags
+        env['LDFLAGS'] = ldflags
+        env['LIBS'] = libs
+        env['AR'] = ar
+        env['STRIP'] = strip
+
+        configure = [
+            './buildtools/bin/waf', 'configure',
+            '--cross-compile',
+            '--cross-answers=' + os.path.join(mpd_path, 'android', 'samba4-cache.txt'),
+            '--hostcc=' + cc,
+            '--host=' + host_arch,
+            '--prefix=' + root_path,
+        ] + self.configure_args
+
+        subprocess.check_call(configure, cwd=src, env=env)
+        subprocess.check_call(['./buildtools/bin/waf', 'build', '--targets=smbclient'], cwd=src)
+
 # a list of third-party libraries to be used by MPD on Android
 thirdparty_libs = [
     AutotoolsProject(
@@ -410,6 +448,26 @@ thirdparty_libs = [
         'http://netcologne.dl.sourceforge.net/project/boost/boost/1.55.0/boost_1_55_0.tar.bz2',
         'd6eef4b4cacb2183f2bf265a5a03a354',
         'include/boost/version.hpp',
+    ),
+
+    SambaProject(
+        'https://download.samba.org/pub/samba/stable/samba-4.2.1.tar.gz',
+        '614b4c7b9bbc70cff4cb56956f565741',
+        'lib/libsmbclient.so',
+        [
+            '--disable-rpath', '--disable-rpath-install',
+            '--disable-iprint', '--without-pam', '--without-dmapi',
+            '--disable-glusterfs', '--without-ad-dc', '--without-ads',
+            '--without-ldap', '--without-acl-support', '--disable-cups',
+            '--without-aio-support', '--disable-avahi', '--without-fam',
+            '--without-gettext',
+            '--without-gettext',
+            '--without-systemd',
+            '--without-relro',
+            '--without-pie',
+            '--disable-gnutls', '--without-regedit',
+            '--bundled-libraries=\'!asn1_compile,!compile_et\''
+        ],
     ),
 ]
 
