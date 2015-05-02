@@ -411,6 +411,19 @@ thirdparty_libs = [
         use_clang=True,
     ),
 
+    AutotoolsProject(
+        'https://github.com/sahlberg/libnfs/archive/libnfs-1.9.7.tar.gz',
+        '2bd84e6374a1bdeede5a025d77db0e05',
+        'lib/libnfs.a',
+        [
+            '--disable-shared', '--enable-static',
+        ],
+        use_clang=True,
+        autogen=True,
+        cppflags='-DANDROID',
+        unpacked_path='libnfs-libnfs-1.9.7',
+    ),
+
     BoostProject(
         'http://netcologne.dl.sourceforge.net/project/boost/boost/1.58.0/boost_1_58_0.tar.bz2',
         'b8839650e61e9c1c0a89f371dd475546',
