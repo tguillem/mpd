@@ -149,7 +149,7 @@ def download_tarball(url, md5):
 class Project:
     def __init__(self, url, md5, installed, name=None, version=None,
                  base=None,
-                 use_cxx=False, use_clang=False):
+                 use_cxx=False, use_clang=False, unpacked_path=None):
         if base is None:
             basename = os.path.basename(url)
             m = re.match(r'^(.+)\.(tar(\.(gz|bz2|xz|lzma))?|zip)$', basename)
@@ -172,6 +172,7 @@ class Project:
 
         self.use_cxx = use_cxx
         self.use_clang = use_clang
+        self.unpacked_path = unpacked_path
 
     def download(self):
         return download_tarball(self.url, self.md5)
@@ -196,7 +197,7 @@ class Project:
             pass
         os.makedirs(src_path, exist_ok=True)
         subprocess.check_call(['/bin/tar', 'xfC', tarball, src_path])
-        return path
+        return path if self.unpacked_path is None else os.path.join(src_path, self.unpacked_path);
 
     def make_build_path(self):
         path = os.path.join(build_path, self.base)
