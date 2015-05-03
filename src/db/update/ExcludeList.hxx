@@ -32,6 +32,9 @@
 
 #ifdef HAVE_GLIB
 #include <glib.h>
+#else
+#include <sys/types.h>
+#include <regex.h>
 #endif
 
 class Path;
@@ -59,21 +62,41 @@ class ExcludeList {
 			return g_pattern_match_string(pattern, name_fs);
 		}
 	};
+#else
+	class Pattern {
+		int ret;
+		regex_t preg;
+
+	public:
+		Pattern(const char *_pattern)
+		{
+			ret = regcomp(&preg, _pattern, REG_EXTENDED|REG_NOSUB);
+		}
+
+		Pattern(Pattern &&other)
+			:ret(other.ret), preg(other.preg) {
+			other.ret = -1;
+		}
+
+		~Pattern() {
+			if (ret == 0)
+				regfree(&preg);
+		}
+
+		gcc_pure
+		bool Check(const char *name_fs) const {
+			return ret == 0 &&
+				regexec(&preg, name_fs, 0, nullptr, 0) == 0;
+		}
+	};
+#endif
 
 	std::forward_list<Pattern> patterns;
-#else
-	// TODO: implement
-#endif
 
 public:
 	gcc_pure
 	bool IsEmpty() const {
-#ifdef HAVE_GLIB
 		return patterns.empty();
-#else
-		// TODO: implement
-		return true;
-#endif
 	}
 
 	/**

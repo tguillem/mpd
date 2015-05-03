@@ -35,26 +35,27 @@
 #include <string.h>
 #include <errno.h>
 
-#ifdef HAVE_GLIB
-
 gcc_pure
 static bool
 IsFileNotFound(const Error &error)
 {
+#ifdef HAVE_GLIB
 #ifdef WIN32
 	return error.IsDomain(win32_domain) &&
 		error.GetCode() == ERROR_FILE_NOT_FOUND;
 #else
 	return error.IsDomain(errno_domain) && error.GetCode() == ENOENT;
 #endif
+#else
+	(void) error;
+	return true;
+#endif
 }
 
-#endif
 
 bool
 ExcludeList::LoadFile(Path path_fs)
 {
-#ifdef HAVE_GLIB
 	Error error;
 	TextFile file(path_fs, error);
 	if (file.HasFailed()) {
@@ -73,10 +74,6 @@ ExcludeList::LoadFile(Path path_fs)
 		if (*p != 0)
 			patterns.emplace_front(p);
 	}
-#else
-	// TODO: implement
-	(void)path_fs;
-#endif
 
 	return true;
 }
@@ -88,14 +85,9 @@ ExcludeList::Check(Path name_fs) const
 
 	/* XXX include full path name in check */
 
-#ifdef HAVE_GLIB
 	for (const auto &i : patterns)
 		if (i.Check(NarrowPath(name_fs).c_str()))
 			return true;
-#else
-	// TODO: implement
-	(void)name_fs;
-#endif
 
 	return false;
 }
