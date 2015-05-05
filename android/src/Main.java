@@ -236,7 +236,11 @@ public class Main extends Service implements Runnable {
 				}
 			}
 			try {
-				mThread.join();
+				mThread.join(10000);
+				if (mThread.isAlive()) {
+					Log.e(TAG, "MPD process doesn't respond to shutdown, force kill");
+					System.exit(-1);
+				}
 				mThread = null;
 				mAbort = false;
 			} catch (InterruptedException ie) {}
