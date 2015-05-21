@@ -23,6 +23,8 @@
 #include "db/plugins/simple/Directory.hxx"
 #include "storage/StorageInterface.hxx"
 #include "storage/FileInfo.hxx"
+#include "thread/Mutex.hxx"
+#include "thread/Cond.hxx"
 #include "util/UriUtil.hxx"
 #include "util/Error.hxx"
 #include "fs/AllocatedPath.hxx"
@@ -34,8 +36,8 @@
 #include "tag/TagHandler.hxx"
 #include "tag/TagId3.hxx"
 #include "tag/ApeTag.hxx"
-#include "TagFile.hxx"
 #include "TagStream.hxx"
+#include "input/InputStream.hxx"
 
 #ifdef ENABLE_ARCHIVE
 #include "TagArchive.hxx"
@@ -77,11 +79,11 @@ Song::LoadFile(Storage &storage, const char *path_utf8, Directory &parent)
  * Attempts to load APE or ID3 tags from the specified file.
  */
 static bool
-tag_scan_fallback(Path path,
+tag_scan_fallback(InputStream &is,
 		  const struct tag_handler *handler, void *handler_ctx)
 {
-	return tag_ape_scan2(path, handler, handler_ctx) ||
-		tag_id3_scan(path, handler, handler_ctx);
+	return tag_ape_scan2(is, handler, handler_ctx) ||
+		tag_id3_scan(is, handler, handler_ctx);
 }
 
 #ifdef ENABLE_DATABASE
@@ -100,22 +102,25 @@ Song::UpdateFile(Storage &storage)
 
 	TagBuilder tag_builder;
 
-	const auto path_fs = storage.MapFS(relative_uri.c_str());
-	if (path_fs.IsNull()) {
-		const auto absolute_uri =
-			storage.MapUTF8(relative_uri.c_str());
-		if (!tag_stream_scan(absolute_uri.c_str(),
-				     full_tag_handler, &tag_builder))
-			return false;
-	} else {
-		if (!tag_file_scan(path_fs, full_tag_handler, &tag_builder))
-			return false;
+	Mutex mutex;
+	Cond cond;
+	const auto absolute_uri = storage.MapUTF8(relative_uri.c_str());
 
-		if (tag_builder.IsEmpty())
-			tag_scan_fallback(path_fs, &full_tag_handler,
-					  &tag_builder);
+	InputStream *is = InputStream::OpenReady(absolute_uri.c_str(), mutex,
+						 cond, IgnoreError());
+	if (is == nullptr)
+		return false;
+
+	if (!tag_stream_scan(*is, full_tag_handler, &tag_builder))
+	{
+		delete is;
+		return false;
 	}
+	if (tag_builder.IsEmpty())
+		tag_scan_fallback(*is, &full_tag_handler,
+				  &tag_builder);
 
+	delete is;
 	mtime = info.mtime;
 	tag_builder.Commit(tag);
 	return true;
@@ -156,35 +161,35 @@ Song::UpdateFileInArchive(const Storage &storage)
 bool
 DetachedSong::Update()
 {
+	TagBuilder tag_builder;
+	Mutex mutex;
+	Cond cond;
+
 	if (IsAbsoluteFile()) {
 		const AllocatedPath path_fs =
 			AllocatedPath::FromUTF8(GetRealURI());
-
 		FileInfo fi;
 		if (!GetFileInfo(path_fs, fi) || !fi.IsRegular())
 			return false;
-
-		TagBuilder tag_builder;
-		if (!tag_file_scan(path_fs, full_tag_handler, &tag_builder))
-			return false;
-
-		if (tag_builder.IsEmpty())
-			tag_scan_fallback(path_fs, &full_tag_handler,
-					  &tag_builder);
-
 		mtime = fi.GetModificationTime();
-		tag_builder.Commit(tag);
-		return true;
-	} else if (IsRemote()) {
-		TagBuilder tag_builder;
-		if (!tag_stream_scan(uri.c_str(), full_tag_handler,
-				     &tag_builder))
-			return false;
-
-		mtime = 0;
-		tag_builder.Commit(tag);
-		return true;
-	} else
-		// TODO: implement
+	} else {
+		mtime = 0; // TODO: implement
+	}
+	InputStream *is = InputStream::OpenReady(uri.c_str(), mutex, cond,
+						 IgnoreError());
+	if (is == nullptr)
 		return false;
+
+	if (!tag_stream_scan(*is, full_tag_handler, &tag_builder))
+	{
+		delete is;
+		return false;
+	}
+	if (tag_builder.IsEmpty())
+		tag_scan_fallback(*is, &full_tag_handler,
+				  &tag_builder);
+	delete is;
+
+	tag_builder.Commit(tag);
+	return true;
 }
