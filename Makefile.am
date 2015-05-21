@@ -175,7 +175,6 @@ libmpd_a_SOURCES = \
 	src/Stats.cxx src/Stats.hxx \
 	src/TagPrint.cxx src/TagPrint.hxx \
 	src/TagSave.cxx src/TagSave.hxx \
-	src/TagFile.cxx src/TagFile.hxx \
 	src/TagStream.cxx src/TagStream.hxx \
 	src/TimePrint.cxx src/TimePrint.hxx \
 	src/mixer/Volume.cxx src/mixer/Volume.hxx \
@@ -1778,7 +1777,6 @@ test_dump_playlist_SOURCES = test/dump_playlist.cxx \
 	src/Log.cxx src/LogBackend.cxx \
 	src/IOThread.cxx \
 	src/TagSave.cxx \
-	src/TagFile.cxx \
 	src/AudioFormat.cxx src/CheckAudioFormat.cxx \
 	src/DetachedSong.cxx
 

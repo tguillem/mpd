@@ -33,7 +33,6 @@
 #include "tag/ApeTag.hxx"
 #include "tag/TagId3.hxx"
 #include "TagStream.hxx"
-#include "TagFile.hxx"
 #include "thread/Mutex.hxx"
 #include "thread/Cond.hxx"
 #include "storage/StorageInterface.hxx"
