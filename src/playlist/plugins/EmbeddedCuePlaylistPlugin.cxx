@@ -32,10 +32,12 @@
 #include "tag/TagId3.hxx"
 #include "tag/ApeTag.hxx"
 #include "DetachedSong.hxx"
-#include "TagFile.hxx"
+#include "TagStream.hxx"
 #include "fs/Traits.hxx"
 #include "fs/AllocatedPath.hxx"
 #include "util/ASCII.hxx"
+#include "util/Error.hxx"
+#include "input/InputStream.hxx"
 
 #include <string.h>
 
@@ -90,8 +92,8 @@ static const struct tag_handler embcue_tag_handler = {
 
 static SongEnumerator *
 embcue_playlist_open_uri(const char *uri,
-			 gcc_unused Mutex &mutex,
-			 gcc_unused Cond &cond)
+			 Mutex &mutex,
+			 Cond &cond)
 {
 	if (!PathTraitsUTF8::IsAbsolute(uri))
 		/* only local files supported */
@@ -103,12 +105,20 @@ embcue_playlist_open_uri(const char *uri,
 
 	const auto playlist = new EmbeddedCuePlaylist();
 
-	tag_file_scan(path_fs, embcue_tag_handler, playlist);
-	if (playlist->cuesheet.empty()) {
-		tag_ape_scan2(path_fs, &embcue_tag_handler, playlist);
-		if (playlist->cuesheet.empty())
-			tag_id3_scan(path_fs, &embcue_tag_handler, playlist);
+	InputStream *is = InputStream::OpenReady(path_fs.c_str(), mutex,
+						 cond, IgnoreError());
+	if (is == nullptr)
+	{
+		delete playlist;
+		return nullptr;
 	}
+	tag_stream_scan(*is, embcue_tag_handler, playlist);
+	if (playlist->cuesheet.empty()) {
+		tag_ape_scan2(*is, &embcue_tag_handler, playlist);
+		if (playlist->cuesheet.empty())
+			tag_id3_scan(*is, &embcue_tag_handler, playlist);
+	}
+	delete is;
 
 	if (playlist->cuesheet.empty()) {
 		/* no "CUESHEET" tag found */
