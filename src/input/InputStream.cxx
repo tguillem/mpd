@@ -132,10 +132,39 @@ InputStream::LockRead(void *ptr, size_t _size, Error &error)
 	return Read(ptr, _size, error);
 }
 
+size_t
+InputStream::ReadFull(void *_ptr, size_t _size, Error &error)
+{
+	uint8_t *ptr = (uint8_t *)_ptr;
+
+	size_t nbytes_total = 0;
+	while (_size > 0) {
+		size_t nbytes = Read(ptr + nbytes_total, _size, error);
+		if (nbytes == 0)
+			return 0;
+
+		nbytes_total += nbytes;
+		_size -= nbytes;
+	}
+	return nbytes_total;
+}
+
+size_t
+InputStream::LockReadFull(void *ptr, size_t _size, Error &error)
+{
+#if !CLANG_CHECK_VERSION(3,6)
+	/* disabled on clang due to -Wtautological-pointer-compare */
+	assert(ptr != nullptr);
+#endif
+	assert(_size > 0);
+
+	const ScopeLock protect(mutex);
+	return ReadFull(ptr, _size, error);
+}
+
 bool
 InputStream::LockIsEOF()
 {
 	const ScopeLock protect(mutex);
 	return IsEOF();
 }
-
