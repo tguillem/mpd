@@ -22,6 +22,7 @@
 
 #include "check.h"
 #include "Compiler.h"
+#include "input/InputStream.hxx"
 
 class Path;
 struct tag_handler;
@@ -30,6 +31,10 @@ struct id3_tag;
 class Error;
 
 #ifdef ENABLE_ID3TAG
+
+bool
+tag_id3_scan(InputStream &is,
+	     const tag_handler *handler, void *handler_ctx);
 
 bool
 tag_id3_scan(Path path_fs,
@@ -46,7 +51,7 @@ tag_id3_import(id3_tag *);
  * Error will be set)
  */
 struct id3_tag *
-tag_id3_load(Path path_fs, Error &error);
+tag_id3_load(InputStream &is, Error &error);
 
 /**
  * Import all tags from the provided id3_tag *tag
@@ -58,10 +63,8 @@ scan_id3_tag(id3_tag *tag,
 
 #else
 
-#include "fs/Path.hxx"
-
 static inline bool
-tag_id3_scan(gcc_unused Path path_fs,
+tag_id3_scan(gcc_unused InputStream &is,
 	     gcc_unused const tag_handler *handler,
 	     gcc_unused void *handler_ctx)
 {

@@ -20,6 +20,7 @@
 #include "config.h" /* must be first for large file support */
 #include "Riff.hxx"
 #include "util/Domain.hxx"
+#include "util/Error.hxx"
 #include "system/ByteOrder.hxx"
 #include "Log.hxx"
 
@@ -43,28 +44,16 @@ struct riff_chunk_header {
 };
 
 size_t
-riff_seek_id3(FILE *file)
+riff_seek_id3(InputStream &is)
 {
-	/* determine the file size */
-
-	struct stat st;
-	if (fstat(fileno(file), &st) < 0) {
-		LogErrno(riff_domain, "Failed to stat file descriptor");
-		return 0;
-	}
-
 	/* seek to the beginning and read the RIFF header */
-
-	if (fseek(file, 0, SEEK_SET) != 0) {
-		LogErrno(riff_domain, "Failed to seek");
-		return 0;
-	}
+	is.Rewind(IgnoreError());
 
 	riff_header header;
-	size_t size = fread(&header, sizeof(header), 1, file);
-	if (size != 1 ||
+	size_t size = is.ReadFull(&header, sizeof(header), IgnoreError());
+	if (size != sizeof(header) ||
 	    memcmp(header.id, "RIFF", 4) != 0 ||
-	    FromLE32(header.size) > (uint32_t)st.st_size)
+	    FromLE32(header.size) > is.GetSize())
 		/* not a RIFF file */
 		return 0;
 
@@ -72,8 +61,8 @@ riff_seek_id3(FILE *file)
 		/* read the chunk header */
 
 		riff_chunk_header chunk;
-		size = fread(&chunk, sizeof(chunk), 1, file);
-		if (size != 1)
+		size = is.ReadFull(&chunk, sizeof(chunk), IgnoreError());
+		if (size != sizeof(chunk))
 			return 0;
 
 		size = FromLE32(chunk.size);
@@ -91,7 +80,7 @@ riff_seek_id3(FILE *file)
 			/* found it! */
 			return size;
 
-		if (fseek(file, size, SEEK_CUR) != 0)
+		if (!is.Seek(size + is.GetOffset(), IgnoreError()))
 			return 0;
 	}
 }

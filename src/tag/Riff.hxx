@@ -28,6 +28,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "input/InputStream.hxx"
+
 /**
  * Seeks the RIFF file to the ID3 chunk.
  *
@@ -35,6 +37,6 @@
  * RIFF file or no ID3 chunk was found
  */
 size_t
-riff_seek_id3(FILE *file);
+riff_seek_id3(InputStream &is);
 
 #endif

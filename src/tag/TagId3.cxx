@@ -32,6 +32,8 @@
 #include "Aiff.hxx"
 #include "fs/Path.hxx"
 #include "fs/FileSystem.hxx"
+#include "thread/Mutex.hxx"
+#include "thread/Cond.hxx"
 
 #ifdef HAVE_GLIB
 #include <glib.h>
@@ -394,28 +396,46 @@ tag_id3_import(struct id3_tag *tag)
 }
 
 static size_t
-fill_buffer(void *buf, size_t size, FILE *stream, long offset, int whence)
+fill_buffer(void *buf, size_t size, InputStream &is, long offset, int whence)
 {
-	if (fseek(stream, offset, whence) != 0) return 0;
-	return fread(buf, 1, size, stream);
+	offset_type absolute_offset;
+	switch (whence)
+	{
+	case SEEK_SET:
+		absolute_offset = offset;
+		break;
+	case SEEK_CUR:
+		absolute_offset = offset + is.GetOffset();
+		break;
+	case SEEK_END:
+		absolute_offset = is.GetSize() + offset;
+		break;
+	default:
+		assert(false);
+		gcc_unreachable();
+	}
+	if (!is.Seek(absolute_offset, IgnoreError()))
+		return 0;
+
+	return is.ReadFull(buf, size, IgnoreError());
 }
 
 static long
-get_id3v2_footer_size(FILE *stream, long offset, int whence)
+get_id3v2_footer_size(InputStream &is, long offset, int whence)
 {
 	id3_byte_t buf[ID3_TAG_QUERYSIZE];
-	size_t bufsize = fill_buffer(buf, ID3_TAG_QUERYSIZE, stream, offset, whence);
+	size_t bufsize = fill_buffer(buf, ID3_TAG_QUERYSIZE, is, offset, whence);
 	if (bufsize == 0) return 0;
 	return id3_tag_query(buf, bufsize);
 }
 
 static struct id3_tag *
-tag_id3_read(FILE *stream, long offset, int whence)
+tag_id3_read(InputStream &is, long offset, int whence)
 {
 	/* It's ok if we get less than we asked for */
 	id3_byte_t query_buffer[ID3_TAG_QUERYSIZE];
 	size_t query_buffer_size = fill_buffer(query_buffer, ID3_TAG_QUERYSIZE,
-					       stream, offset, whence);
+					       is, offset, whence);
 	if (query_buffer_size <= 0)
 		return nullptr;
 
@@ -426,7 +446,7 @@ tag_id3_read(FILE *stream, long offset, int whence)
 	/* Found a tag.  Allocate a buffer and read it in. */
 	id3_byte_t *tag_buffer = new id3_byte_t[tag_size];
 	int tag_buffer_size = fill_buffer(tag_buffer, tag_size,
-					  stream, offset, whence);
+					  is, offset, whence);
 	if (tag_buffer_size < tag_size) {
 		delete[] tag_buffer;
 		return nullptr;
@@ -438,9 +458,9 @@ tag_id3_read(FILE *stream, long offset, int whence)
 }
 
 static struct id3_tag *
-tag_id3_find_from_beginning(FILE *stream)
+tag_id3_find_from_beginning(InputStream &is)
 {
-	id3_tag *tag = tag_id3_read(stream, 0, SEEK_SET);
+	id3_tag *tag = tag_id3_read(is, 0, SEEK_SET);
 	if (!tag) {
 		return nullptr;
 	} else if (tag_is_id3v1(tag)) {
@@ -458,7 +478,7 @@ tag_id3_find_from_beginning(FILE *stream)
 			break;
 
 		/* Get the tag specified by the SEEK frame */
-		id3_tag *seektag = tag_id3_read(stream, seek, SEEK_CUR);
+		id3_tag *seektag = tag_id3_read(is, seek, SEEK_CUR);
 		if (!seektag || tag_is_id3v1(seektag))
 			break;
 
@@ -471,18 +491,18 @@ tag_id3_find_from_beginning(FILE *stream)
 }
 
 static struct id3_tag *
-tag_id3_find_from_end(FILE *stream)
+tag_id3_find_from_end(InputStream &is)
 {
 	/* Get an id3v1 tag from the end of file for later use */
-	id3_tag *v1tag = tag_id3_read(stream, -128, SEEK_END);
+	id3_tag *v1tag = tag_id3_read(is, -128, SEEK_END);
 
 	/* Get the id3v2 tag size from the footer (located before v1tag) */
-	int tagsize = get_id3v2_footer_size(stream, (v1tag ? -128 : 0) - 10, SEEK_END);
+	int tagsize = get_id3v2_footer_size(is, (v1tag ? -128 : 0) - 10, SEEK_END);
 	if (tagsize >= 0)
 		return v1tag;
 
 	/* Get the tag which the footer belongs to */
-	id3_tag *tag = tag_id3_read(stream, tagsize, SEEK_CUR);
+	id3_tag *tag = tag_id3_read(is, tagsize, SEEK_CUR);
 	if (!tag)
 		return v1tag;
 
@@ -493,11 +513,11 @@ tag_id3_find_from_end(FILE *stream)
 }
 
 static struct id3_tag *
-tag_id3_riff_aiff_load(FILE *file)
+tag_id3_riff_aiff_load(InputStream &is)
 {
-	size_t size = riff_seek_id3(file);
+	size_t size = riff_seek_id3(is);
 	if (size == 0)
-		size = aiff_seek_id3(file);
+		size = aiff_seek_id3(is);
 	if (size == 0)
 		return nullptr;
 
@@ -506,8 +526,8 @@ tag_id3_riff_aiff_load(FILE *file)
 		return nullptr;
 
 	id3_byte_t *buffer = new id3_byte_t[size];
-	size_t ret = fread(buffer, size, 1, file);
-	if (ret != 1) {
+	size_t ret = is.ReadFull(buffer, size, IgnoreError());
+	if (ret != size) {
 		LogWarning(id3_domain, "Failed to read RIFF chunk");
 		delete[] buffer;
 		return nullptr;
@@ -519,31 +539,31 @@ tag_id3_riff_aiff_load(FILE *file)
 }
 
 struct id3_tag *
-tag_id3_load(Path path_fs, Error &error)
+tag_id3_load(InputStream &is, Error &error)
 {
-	FILE *file = FOpen(path_fs, PATH_LITERAL("rb"));
-	if (file == nullptr) {
-		error.FormatErrno("Failed to open file %s", path_fs.c_str());
+	is.Lock();
+	if (!is.KnownSize() || !is.IsSeekable())
+	{
+		is.Unlock();
 		return nullptr;
 	}
-
-	struct id3_tag *tag = tag_id3_find_from_beginning(file);
+	struct id3_tag *tag = tag_id3_find_from_beginning(is);
 	if (tag == nullptr) {
-		tag = tag_id3_riff_aiff_load(file);
+		tag = tag_id3_riff_aiff_load(is);
 		if (tag == nullptr)
-			tag = tag_id3_find_from_end(file);
+			tag = tag_id3_find_from_end(is);
 	}
-
-	fclose(file);
+	is.Rewind(error);
+	is.Unlock();
 	return tag;
 }
 
 bool
-tag_id3_scan(Path path_fs,
+tag_id3_scan(InputStream &is,
 	     const struct tag_handler *handler, void *handler_ctx)
 {
 	Error error;
-	struct id3_tag *tag = tag_id3_load(path_fs, error);
+	struct id3_tag *tag = tag_id3_load(is, error);
 	if (tag == nullptr) {
 		if (error.IsDefined())
 			LogError(error);
@@ -554,4 +574,20 @@ tag_id3_scan(Path path_fs,
 	scan_id3_tag(tag, handler, handler_ctx);
 	id3_tag_delete(tag);
 	return true;
+}
+
+bool
+tag_id3_scan(Path path_fs,
+	     const struct tag_handler *handler, void *handler_ctx)
+{
+    Mutex mutex;
+    Cond cond;
+    InputStream *is = InputStream::OpenReady(path_fs.c_str(), mutex,
+                                             cond, IgnoreError());
+    if (is == nullptr)
+            return false;
+
+    bool success = tag_id3_scan(*is, handler, handler_ctx);
+    delete is;
+    return success;
 }

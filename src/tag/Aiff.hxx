@@ -28,6 +28,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "input/InputStream.hxx"
+
 /**
  * Seeks the AIFF file to the ID3 chunk.
  *
@@ -35,6 +37,6 @@
  * AIFF file or no ID3 chunk was found
  */
 size_t
-aiff_seek_id3(FILE *file);
+aiff_seek_id3(InputStream &is);
 
 #endif

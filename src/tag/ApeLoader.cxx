@@ -21,6 +21,9 @@
 #include "ApeLoader.hxx"
 #include "system/ByteOrder.hxx"
 #include "fs/FileSystem.hxx"
+#include "util/Error.hxx"
+#include "thread/Mutex.hxx"
+#include "thread/Cond.hxx"
 
 #include <stdint.h>
 #include <assert.h>
@@ -36,31 +39,46 @@ struct ape_footer {
 	unsigned char reserved[8];
 };
 
-static bool
-ape_scan_internal(FILE *fp, ApeTagCallback callback)
+bool
+tag_ape_scan(InputStream &is, ApeTagCallback callback)
 {
+	is.Lock();
+	if (!is.KnownSize() || !is.IsSeekable())
+	{
+		is.Unlock();
+		return false;
+	}
 	/* determine if file has an apeV2 tag */
 	struct ape_footer footer;
-	if (fseek(fp, -(long)sizeof(footer), SEEK_END) ||
-	    fread(&footer, 1, sizeof(footer), fp) != sizeof(footer) ||
+	if (!is.Seek(is.GetSize() - (long)sizeof(footer), IgnoreError()) ||
+	    is.ReadFull(&footer, sizeof(footer), IgnoreError()) != sizeof(footer) ||
 	    memcmp(footer.id, "APETAGEX", sizeof(footer.id)) != 0 ||
 	    FromLE32(footer.version) != 2000)
+	{
+		is.Rewind(IgnoreError());
+		is.Unlock();
 		return false;
+	}
 
 	/* find beginning of ape tag */
 	size_t remaining = FromLE32(footer.length);
 	if (remaining <= sizeof(footer) + 10 ||
 	    /* refuse to load more than one megabyte of tag data */
 	    remaining > 1024 * 1024 ||
-	    fseek(fp, -(long)remaining, SEEK_END))
+	    !is.Seek(is.GetSize() - (long)remaining, IgnoreError())) {
+		is.Rewind(IgnoreError());
+		is.Unlock();
 		return false;
+	}
 
 	/* read tag into buffer */
 	remaining -= sizeof(footer);
 	assert(remaining > 10);
 
 	char *buffer = new char[remaining];
-	if (fread(buffer, 1, remaining, fp) != remaining) {
+	if (is.ReadFull(buffer, remaining, IgnoreError()) != remaining) {
+		is.Rewind(IgnoreError());
+		is.Unlock();
 		delete[] buffer;
 		return false;
 	}
@@ -96,6 +114,8 @@ ape_scan_internal(FILE *fp, ApeTagCallback callback)
 		remaining -= size;
 	}
 
+	is.Rewind(IgnoreError());
+	is.Unlock();
 	delete[] buffer;
 	return true;
 }
@@ -103,11 +123,14 @@ ape_scan_internal(FILE *fp, ApeTagCallback callback)
 bool
 tag_ape_scan(Path path_fs, ApeTagCallback callback)
 {
-	FILE *fp = FOpen(path_fs, PATH_LITERAL("rb"));
-	if (fp == nullptr)
+	Mutex mutex;
+	Cond cond;
+	InputStream *is = InputStream::OpenReady(path_fs.c_str(), mutex,
+						 cond, IgnoreError());
+	if (is == nullptr)
 		return false;
 
-	bool success = ape_scan_internal(fp, callback);
-	fclose(fp);
+	bool success = tag_ape_scan(*is, callback);
+	delete is;
 	return success;
 }

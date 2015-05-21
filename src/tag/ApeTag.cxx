@@ -104,6 +104,25 @@ tag_ape_import_item(unsigned long flags,
 }
 
 bool
+tag_ape_scan2(InputStream &is,
+	      const struct tag_handler *handler, void *handler_ctx)
+{
+	bool recognized = false;
+
+	auto callback = [handler, handler_ctx, &recognized]
+		(unsigned long flags, const char *key,
+		 const char *value,
+		 size_t value_length) {
+		recognized |= tag_ape_import_item(flags, key, value,
+						  value_length,
+						  handler, handler_ctx);
+		return true;
+	};
+
+	return tag_ape_scan(is, callback) && recognized;
+}
+
+bool
 tag_ape_scan2(Path path_fs,
 	      const struct tag_handler *handler, void *handler_ctx)
 {
