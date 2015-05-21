@@ -34,12 +34,15 @@
 #include "tag/TagId3.hxx"
 #include "TagStream.hxx"
 #include "TagFile.hxx"
+#include "thread/Mutex.hxx"
+#include "thread/Cond.hxx"
 #include "storage/StorageInterface.hxx"
 #include "fs/AllocatedPath.hxx"
 #include "fs/FileInfo.hxx"
 #include "fs/DirectoryReader.hxx"
 #include "TimePrint.hxx"
 #include "ls.hxx"
+#include "input/InputStream.hxx"
 
 #include <assert.h>
 #include <sys/stat.h>
@@ -191,15 +194,24 @@ read_stream_comments(Client &client, const char *uri)
 static CommandResult
 read_file_comments(Client &client, const Path path_fs)
 {
-	if (!tag_file_scan(path_fs, print_comment_handler, &client)) {
+	Mutex mutex;
+	Cond cond;
+	InputStream *is = InputStream::OpenReady(path_fs.c_str(), mutex,
+				                             cond, IgnoreError());
+	if (is == nullptr)
+		return CommandResult::ERROR;
+
+	if (!tag_stream_scan(*is, print_comment_handler, &client))
+	{
+		delete is;
 		command_error(client, ACK_ERROR_NO_EXIST,
 			      "Failed to load file");
 		return CommandResult::ERROR;
 	}
+	tag_ape_scan2(*is, &print_comment_handler, &client);
+	tag_id3_scan(*is, &print_comment_handler, &client);
 
-	tag_ape_scan2(path_fs, &print_comment_handler, &client);
-	tag_id3_scan(path_fs, &print_comment_handler, &client);
-
+	delete is;
 	return CommandResult::OK;
 
 }
