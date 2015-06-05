@@ -20,12 +20,22 @@
 #ifndef MPD_APE_TAG_HXX
 #define MPD_APE_TAG_HXX
 
+#include "input/InputStream.hxx"
 #include "TagTable.hxx"
 
 class Path;
 struct tag_handler;
 
 extern const struct tag_table ape_tags[];
+
+/**
+ * Scan the APE tags of a file.
+ *
+ * @param is the locked input stream to read from
+ */
+bool
+tag_ape_scan2(InputStream &is,
+	      const tag_handler *handler, void *handler_ctx);
 
 /**
  * Scan the APE tags of a file.
