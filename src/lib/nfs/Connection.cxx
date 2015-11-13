@@ -28,11 +28,13 @@
 
 extern "C" {
 #include <nfsc/libnfs.h>
+#include <nfsc/libnfs-raw-nfs.h>
 }
 
 #include <utility>
 
 #include <poll.h> /* for POLLIN, POLLOUT */
+#include <sys/stat.h>
 
 static constexpr unsigned NFS_MOUNT_TIMEOUT = 60;
 
@@ -301,11 +303,35 @@ NfsConnection::OpenDirectory(const char *path, NfsCallback &callback,
 }
 
 const struct nfsdirent *
-NfsConnection::ReadDirectory(struct nfsdir *dir)
+NfsConnection::ReadDirectory(struct nfsdir *dir, const char *path)
 {
 	assert(GetEventLoop().IsInside());
 
-	return nfs_readdir(context, dir);
+	struct nfsdirent *ent = nfs_readdir(context, dir);
+
+    if (ent != nullptr && ent->type == NF3LNK) {
+        struct nfs_stat_64 st;
+
+        std::string uri(path);
+        uri.append("/");
+        uri.append(ent->name);
+
+        int ret = nfs_stat64(context, uri.c_str(), &st);
+        if (ret != 0)
+            return ent;
+
+        if (S_ISREG(st.nfs_mode))
+            ent->type = NF3REG;
+        else if (S_ISDIR(st.nfs_mode))
+            ent->type = NF3DIR;
+        else
+            return ent;
+
+        ent->size = st.nfs_size;
+        ent->mtime.tv_sec = st.nfs_mtime;
+        ent->inode = st.nfs_ino;
+    }
+    return ent;
 }
 
 void

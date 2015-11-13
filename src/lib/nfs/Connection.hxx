@@ -184,7 +184,7 @@ public:
 
 	bool OpenDirectory(const char *path, NfsCallback &callback,
 			   Error &error);
-	const struct nfsdirent *ReadDirectory(struct nfsdir *dir);
+	const struct nfsdirent *ReadDirectory(struct nfsdir *dir, const char * path);
 	void CloseDirectory(struct nfsdir *dir);
 
 	bool Open(const char *path, int flags, NfsCallback &callback,

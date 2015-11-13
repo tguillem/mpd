@@ -365,7 +365,7 @@ NfsListDirectoryOperation::CollectEntries(struct nfsdir *dir)
 	assert(entries.empty());
 
 	const struct nfsdirent *ent;
-	while ((ent = connection.ReadDirectory(dir)) != nullptr) {
+	while ((ent = connection.ReadDirectory(dir, path)) != nullptr) {
 		const Path name_fs = Path::FromFS(ent->name);
 		if (SkipNameFS(name_fs.c_str()))
 			continue;
