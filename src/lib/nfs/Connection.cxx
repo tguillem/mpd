@@ -54,6 +54,23 @@ NfsConnection::CancellableCallback::Stat(nfs_context *ctx,
 }
 
 inline bool
+NfsConnection::CancellableCallback::Lstat(nfs_context *ctx,
+					 const char *path,
+					 Error &error)
+{
+	assert(connection.GetEventLoop().IsInside());
+
+	int result = nfs_lstat64_async(ctx, path, Callback, this);
+	if (result < 0) {
+		error.Format(nfs_domain, "nfs_lstat64_async() failed: %s",
+			     nfs_get_error(ctx));
+		return false;
+	}
+
+	return true;
+}
+
+inline bool
 NfsConnection::CancellableCallback::OpenDirectory(nfs_context *ctx,
 						  const char *path,
 						  Error &error)
@@ -242,6 +259,22 @@ NfsConnection::Stat(const char *path, NfsCallback &callback, Error &error)
 
 	auto &c = callbacks.Add(callback, *this, false);
 	if (!c.Stat(context, path, error)) {
+		callbacks.Remove(c);
+		return false;
+	}
+
+	ScheduleSocket();
+	return true;
+}
+
+bool
+NfsConnection::Lstat(const char *path, NfsCallback &callback, Error &error)
+{
+	assert(GetEventLoop().IsInside());
+	assert(!callbacks.Contains(callback));
+
+	auto &c = callbacks.Add(callback, *this, false);
+	if (!c.Lstat(context, path, error)) {
 		callbacks.Remove(c);
 		return false;
 	}

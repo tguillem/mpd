@@ -69,6 +69,8 @@ class NfsConnection : SocketMonitor, TimeoutMonitor, DeferredMonitor {
 
 		bool Stat(nfs_context *context, const char *path,
 			  Error &error);
+		bool Lstat(nfs_context *context, const char *path,
+			   Error &error);
 		bool OpenDirectory(nfs_context *context, const char *path,
 				   Error &error);
 		bool Open(nfs_context *context, const char *path, int flags,
@@ -178,6 +180,7 @@ public:
 	void RemoveLease(NfsLease &lease);
 
 	bool Stat(const char *path, NfsCallback &callback, Error &error);
+	bool Lstat(const char *path, NfsCallback &callback, Error &error);
 
 	bool OpenDirectory(const char *path, NfsCallback &callback,
 			   Error &error);
